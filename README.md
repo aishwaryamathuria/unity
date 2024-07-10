@@ -1,33 +1,66 @@
-# Milo goes to college
-Use this project template to create a Milo site.
+## Table of Contents
+- [Installation](#installation)
+- [Architecture](#architecture)
+- [Places to look](#placesToLook)
+- [Consumption](#consumption)
+- [Contributing](#contributing)
 
-## Steps
 
-1. Copy existing [`college`](https://adobe.sharepoint.com/:f:/r/sites/adobecom/Shared%20Documents/) content folder to your sharepoint and give helix@adobe.com View access
-2. Click "[Use this template](https://github.com/adobecom/milo-college/generate)" Github button on this project.
+## Installation
 
-From your newly created project
-
-1. Install the [Helix Bot](https://github.com/apps/helix-bot/installations/new).
-2. Change the fstab.yaml file to point to your content.
-3. Add the project to the [Helix Sidekick](https://github.com/adobe/helix-sidekick).
-4. Start creating your content.
-
-## Developing
-1. Install the [Helix CLI](https://github.com/adobe/helix-cli): `sudo npm install -g @adobe/helix-cli`
-1. Run `hlx up` this repo's folder. (opens your browser at `http://localhost:3000`)
+Unity is a Milo bootstrap project.
+1. Install the [aem CLI](https://www.npmjs.com/package/@adobe/aem-cli): `sudo npm install -g @adobe/aem-cli`
+1. Run `aem up` this repo's folder. (opens your browser at `http://localhost:3000`)
 1. Open this repo's folder in your favorite editor and start coding.
 
-## Testing
-```sh
-npm run test
-```
-or:
-```sh
-npm run test:watch
-```
-This will give you several options to debug tests. Note: coverage may not be accurate.
+## Architecture
+Unity UI will be connected to Unity Service for most of the operation. Below are some of the operations by unity service
 
-## Security
-1. Create a Service Now ID for your project via [Service Registry Portal](https://adobe.service-now.com/service_registry_portal.do#/search)
-2. Update the `.kodiak/config.yaml` file to make sure valid team members are assigned security vulnerability Jira tickets.
+1. Remove background
+1. Change Background
+1. Redirect to Acrobat
+
+Apart from this some operations can be performed in client side for better user experience like: image filters, crop, ans resize etc.
+
+[Unity UI architecture](https://wiki.corp.adobe.com/display/adobedotcom/Unity+Architecture)
+
+[Unity Service architecture](https://wiki.corp.adobe.com/display/~shasmish/SAPS+Unity+Service)
+
+
+## Places to look
+All the Unity assets resides at [folder](https://adobe.sharepoint.com/:f:/r/sites/adobecom/Shared%20Documents/unity/unity/assets). This will be accessible from [https://adobe.com/unity/assets](https://adobe.com/unity/assets)
+
+
+All the Unity configs resides at [folder](https://adobe.sharepoint.com/:f:/r/sites/adobecom/Shared%20Documents/unity/unity/configs). This will be accessible from [https://adobe.com/unity/configs](https://adobe.com/unity/configs)
+
+
+All the Unity code can be acesses from [https://adobe.com/unity/unitylibs](https://adobe.com/unity/unitylibs)
+
+A specific version of Unity branch can be loaded by passing ```?unitylibs=<branch_name>``` as query paramter.
+
+## Consumption
+
+### Milo consumption
+All the Milo consuming projects will get the Unity blocks OOTB.
+All though the core Unity functionality resides in this repo, Milo has a light weight unity block whose repsonsibility is to load the unity core functionality. Unity block is not a visual block and works as a metadata block for other blocks(e.g Marquee, Aside) where we need unity features to be enabled.
+
+### Unity with Custom Block
+Unity block can be added after any other block to take the effect. We need to pass a target element(selector) where we need unity feature/ 
+
+### IMS guest token
+Unity Service depends on IMS guest token for logged out user. So IMS client id should be onboarded with IMS guest token [wiki](https://wiki.corp.adobe.com/pages/viewpage.action?spaceKey=~nzotta&title=Guest+Sessions+-+Identity+components+delivery+schedules%2C+integration+and+testing).
+
+
+## Contributing
+
+### Submitting PR
+
+1. PR needs at least two approvals.
+1. Approvals & changes can come from anyone.
+1. Unity Contributors can send PRs from forks.
+1. Unity Committers can merge approved PRs into any branch besides stage or main.
+1. Unity Admins can merge approved PRs into stage and main.
+1. We recommend the following title format for PR:
+    ```bash
+    MWPW-xxxx - Summarize changes in 50 characters or less
+    ```
