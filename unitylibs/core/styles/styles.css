@@ -423,15 +423,20 @@
     max-height: 20px; */
   }
 
-  .unity-enabled .interactive-area .layer-progress {
-    display: none;
+  .unity-enabled .interactive-area .progress-holder {
+    display: flex;
     justify-content: center;
+    align-items: center;
     position: absolute;
     width: 100%;
-    bottom: 321px;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background: rgba(0, 0, 0, 80%);
+    z-index: 3;
   }
 
-  .spectrum-ProgressCircle--indeterminate-fill-submask-2 {
+  .unity-enabled .interactive-area .spectrum-ProgressCircle--indeterminate-fill-submask-2 {
     animation: spectrum-fill-mask-2 1s linear infinite;
   }
   
