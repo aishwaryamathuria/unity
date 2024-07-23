@@ -10,7 +10,7 @@ export const [setUnityLibs, getUnityLibs] = (() => {
         return libs;
       }
       if (project === 'unity') { libs = `${origin}/unitylibs`; return libs; }
-      const branch = new URLSearchParams(window.location.search).get('unitylibs') || 'mai';
+      const branch = new URLSearchParams(window.location.search).get('unitylibs') || 'main';
       if (branch.indexOf('--') > -1) { libs = `https://${branch}.hlx.live/unitylibs`; return libs; }
       libs = `https://${branch}--unity--adobecom.hlx.live/unitylibs`;
       return libs;
