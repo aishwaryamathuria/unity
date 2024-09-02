@@ -29,8 +29,8 @@ export function decorateArea(area = document) {}
 
 const miloLibs = setLibs('/libs');
 
-const { createTag, getConfig, loadStyle } = await import(`${miloLibs}/utils/utils.js`);
-export { createTag, loadStyle, getConfig };
+const { createTag, getConfig, loadStyle, loadLink } = await import(`${miloLibs}/utils/utils.js`);
+export { createTag, loadStyle, getConfig, loadLink };
 const { decorateDefaultLinkAnalytics } = await import(`${miloLibs}/martech/attributes.js`);
 export { decorateDefaultLinkAnalytics };
 
@@ -69,6 +69,22 @@ export async function loadSvg(src) {
   } catch (e) {
     return '';
   }
+}
+
+export async function loadSvgs(svgs) {
+  const promiseArr = [];
+  [...svgs].forEach((svg) => {
+    promiseArr.push(
+      fetch(svg.src)
+        .then((res) => { 
+          if (res.ok) return res.text();
+          else throw new Error('Could not fetch SVG');
+        })
+        .then((txt) => { svg.parentElement.innerHTML = txt; })
+        .catch((e) => { svg.remove() }),
+    );
+  });
+  await Promise.all(promiseArr);
 }
 
 export function loadImg(img) {
