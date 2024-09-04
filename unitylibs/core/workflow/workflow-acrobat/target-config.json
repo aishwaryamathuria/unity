@@ -1,0 +1,32 @@
+{
+  "acom-widget": {
+    "type": "pdf",
+    "selector": ".acom-widget.fillsign",
+    "handler": "render",
+    "renderWidget": false,
+    "source": ".acom-widget.fillsign #file-upload",
+    "target": ".acom-widget.fillsign #file-upload",
+    "actionMap": {
+      "#file-upload": [
+        {
+          "actionType": "upload"
+        }
+      ]
+    }
+  },
+  "marquee": {
+    "type": "pdf",
+    "selector": ".action-area",
+    "handler": "render",
+    "renderWidget": false,
+    "source": ".action-area .con-button",
+    "target": ".action-area .con-button",
+    "actionMap": {
+      ".action-area .con-button": [
+        {
+          "actionType": "upload"
+        }
+      ]
+    }
+  }
+}
