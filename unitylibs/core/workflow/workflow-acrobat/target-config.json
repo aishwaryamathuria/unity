@@ -1,20 +1,29 @@
 {
-  "acom-widget": {
+  "verb-widget.fillsign": {
     "type": "pdf",
-    "selector": ".acom-wrapper",
+    "selector": ".verb-wrapper",
     "handler": "render",
     "renderWidget": false,
-    "source": ".acom-wrapper .acom-container",
-    "target": ".acom-wrapper .acom-container",
+    "source": ".verb-wrapper .verb-container",
+    "target": ".verb-wrapper .verb-container",
     "actionMap": {
-      ".acom-wrapper": [
+      ".verb-wrapper": [
         {
           "actionType": "drop"
         }
       ],
       "#file-upload": [
         {
-          "actionType": "upload"
+          "actionType": "upload",
+          "allowedFileSize": [0, 1000000000],
+          "maxFileCount": 1,
+          "showSplashScreen": true,
+          "splashScreenConfig": {
+            "splashScreenParent": "body"
+          }
+        },
+        {
+          "actionType": "continueInApp"
         }
       ]
     }

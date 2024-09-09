@@ -5,6 +5,7 @@
 
 import {
   getGuestAccessToken,
+  unityConfig,
 } from '../../../scripts/utils.js';
 
 export default class ServiceHandler {
@@ -13,12 +14,12 @@ export default class ServiceHandler {
     this.canvasArea = canvasArea;
   }
 
-  getHeaders(apiKey) {
+  getHeaders() {
     return {
       headers: {
         'Content-Type': 'application/json',
         Authorization: getGuestAccessToken(),
-        'x-api-key': 'leo',
+        'x-api-key': unityConfig.apiKey,
       },
     };
   }
@@ -31,16 +32,13 @@ export default class ServiceHandler {
     };
     try {
       const response = await fetch(api, postOpts);
-      if (response.status !== 200) {
-        //dipatchEvent to DC for error handling
-        return {};
-      }
+      if (response.status !== 200) return null;
       const resJson = await response.json();
       return resJson;
     } catch (err) {
       // if (this.renderWidget) await this.errorToast(err);
     }
-    return {};
+    return null;
   }
 
   // TODO: Define PDF chunking function
