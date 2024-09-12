@@ -9,16 +9,16 @@ import {
 } from '../../../scripts/utils.js';
 
 export default class ActionBinder {
-  constructor(unityEl, workflowCfg, wfblock, canvasArea, actionMap = {}) {
+  constructor(unityEl, workflowCfg, wfblock, canvasArea, actionMap = {}, limits = {}) {
     this.unityEl = unityEl;
     this.workflowCfg = workflowCfg;
     this.block = wfblock;
     this.actionMap = actionMap;
+    this.limits = limits;
     this.canvasArea = canvasArea;
     this.operations = [];
     this.acrobatApiConfig = this.getAcrobatApiConfig();
     this.serviceHandler = null;
-    this.MAX_FILE_SIZE = 1000000000;
   }
 
   getAcrobatApiConfig() {
@@ -29,7 +29,7 @@ export default class ActionBinder {
     return unityConfig;
   }
 
-  async acrobatActionMaps(values, e) {
+  async acrobatActionMaps(values, files) {
     const [{ default: ServiceHandler }] = await Promise.all([
       import(`${getUnityLibs()}/core/workflow/${this.workflowCfg.name}/service-handler.js`),
       new Promise((res) => { loadLink(`${getUnityLibs()}/core/styles/splash-screen.css`, { rel: 'stylesheet', callback: res }); })
@@ -40,8 +40,8 @@ export default class ActionBinder {
     );
     for (const value of values) {
       switch (true) {
-        case value.actionType == 'upload':
-          await this.userPdfUpload(value, e);
+        case value.actionType == 'upload' || value.actionType == 'drop':
+          await this.userPdfUpload(value, files);
           break;
         case value.actionType == 'continueInApp':
           await this.continueInApp();
@@ -57,21 +57,41 @@ export default class ActionBinder {
       const el = this.block.querySelector(key);
       if (!el) return;
       switch (true) {
-        case el.nodeName === 'A':
-          el.href = '#';
-          el.addEventListener('click', async (e) => {
-            await this.acrobatActionMaps(values, e);
+        case el.nodeName === 'DIV':
+          el.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            const files = this.extractFiles(e);
+            await this.acrobatActionMaps(values, files);
           });
           break;
         case el.nodeName === 'INPUT':
           el.addEventListener('change', async (e) => {
-            await this.acrobatActionMaps(values, e);
+            const files = this.extractFiles(e);
+            await this.acrobatActionMaps(values, files);
+            e.target.value = '';
           });
           break;
         default:
           break;
       }
     }
+  }
+
+  extractFiles(e) {
+    const files = [];
+    if (e.dataTransfer?.items) {
+      [...e.dataTransfer.items].forEach((item) => {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          files.push(file);
+        }
+      });
+    } else if (e.target?.files) {
+      [...e.target.files].forEach((file) => {
+        files.push(file);
+      });
+    }
+    return files;
   }
 
   async getBlobData(file) {
@@ -109,6 +129,7 @@ export default class ActionBinder {
   }
 
   async continueInApp() {
+    if (this.operations.length < 1) return;
     const { assetId, filename, filesize, filetype } = this.operations[this.operations.length - 1];
     const cOpts = {
       assetId,
@@ -132,7 +153,6 @@ export default class ActionBinder {
     );
     if (!response) return;
     window.location.href = response.url;
-    // console.log(response.url);
   }
 
   handleSplashScreen(params) {
@@ -146,13 +166,12 @@ export default class ActionBinder {
     splashParent.prepend(splashDom);
   }
 
-  async userPdfUpload(params, e) {
-    const files = e.target.files;
-    if (!files || files.length > params.maxFileCount) return;
+  async userPdfUpload(params, files) {
+    if (!files || files.length > this.limits.maxNumFiles) return;
     const file = files[0];
     if (!file) return;
     if (file.type != 'application/pdf') return;
-    const [minsize, maxsize] = params.allowedFileSize;
+    const [minsize, maxsize] = this.limits.allowedFileSize;
     if (!((file.size > minsize) && (file.size <= maxsize))) return;
     this.handleSplashScreen(params);
     const blobData = await this.getBlobData(file);
