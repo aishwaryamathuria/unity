@@ -195,6 +195,7 @@ export const unityConfig = (() => {
     apiKey: 'leo',
     refreshWidgetEvent: 'unity:refresh-widget',
     interactiveSwitchEvent: 'unity:interactive-switch',
+    surfaceId: 'unity',
   };
   const cfg = {
     prod: {
