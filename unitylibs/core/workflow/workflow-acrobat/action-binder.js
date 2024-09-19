@@ -5,7 +5,11 @@
 import {
   unityConfig,
   getUnityLibs,
-  loadLink
+  createTag,
+  localizeLink,
+  priorityLoad,
+  loadArea,
+  loadImg
 } from '../../../scripts/utils.js';
 
 export default class ActionBinder {
@@ -19,6 +23,10 @@ export default class ActionBinder {
     this.operations = [];
     this.acrobatApiConfig = this.getAcrobatApiConfig();
     this.serviceHandler = null;
+    this.splashScreenEl = null;
+    this.promiseStack = [];
+    this.LOADER_DELAY = 800;
+    this.LOADER_INCREMENT = 30;
   }
 
   getAcrobatApiConfig() {
@@ -29,11 +37,39 @@ export default class ActionBinder {
     return unityConfig;
   }
 
+  async handlePreloads() {
+    const parr = [`${getUnityLibs()}/core/workflow/${this.workflowCfg.name}/service-handler.js`];
+    if (this.workflowCfg.targetCfg.showSplashScreen) {
+      parr.push(
+        `${getUnityLibs()}/core/styles/splash-screen.css`,
+        `${this.splashFragmentLink}.plain.html`);
+    }
+    await priorityLoad(parr);
+  }
+  
+  updateProgressBar(layer, percentage) {
+    const p = Math.min(percentage, 100);
+    const spb = layer.querySelector('.spectrum-ProgressBar');
+    spb?.setAttribute('value', p);
+    spb?.setAttribute('aria-valuenow', p);
+    layer.querySelector('.spectrum-ProgressBar-percentage').innerHTML = `${p}%`;
+    layer.querySelector('.spectrum-ProgressBar-fill').style.width = `${p}%`;
+  }
+
+  createProgressBar() {
+    const pdom = `<div class="spectrum-ProgressBar spectrum-ProgressBar--sizeM spectrum-ProgressBar--sideLabel" value="0" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+    <div class="spectrum-FieldLabel spectrum-FieldLabel--sizeM spectrum-ProgressBar-label"></div>
+    <div class="spectrum-FieldLabel spectrum-FieldLabel--sizeM spectrum-ProgressBar-percentage">0%</div>
+    <div class="spectrum-ProgressBar-track">
+      <div class="spectrum-ProgressBar-fill" style="width: 0%;"></div>
+    </div>
+    </div>`;
+    return createTag('div', { class: 'progress-holder' }, pdom);
+  }
+
   async acrobatActionMaps(values, files) {
-    const [{ default: ServiceHandler }] = await Promise.all([
-      import(`${getUnityLibs()}/core/workflow/${this.workflowCfg.name}/service-handler.js`),
-      new Promise((res) => { loadLink(`${getUnityLibs()}/core/styles/splash-screen.css`, { rel: 'stylesheet', callback: res }); })
-    ]);
+    await this.handlePreloads();
+    const { default: ServiceHandler } = await import(`${getUnityLibs()}/core/workflow/${this.workflowCfg.name}/service-handler.js`);
     this.serviceHandler = new ServiceHandler(
       this.workflowCfg.targetCfg.renderWidget,
       this.canvasArea,
@@ -41,22 +77,31 @@ export default class ActionBinder {
     for (const value of values) {
       switch (true) {
         case value.actionType == 'upload' || value.actionType == 'drop':
-          await this.userPdfUpload(value, files);
+          this.promiseStack = [];
+          await this.userPdfUpload(files);
           break;
         case value.actionType == 'continueInApp':
           await this.continueInApp();
           break;
+        case value.actionType == 'interrupt':
+          await this.cancelAcrobatOperation();
         default:
           break;
       }
     }
   }
 
-  initActionListeners() {
-    for (const [key, values] of Object.entries(this.actionMap)) {
-      const el = this.block.querySelector(key);
+  async initActionListeners(b = this.block, actMap = this.actionMap) {
+    for (const [key, values] of Object.entries(actMap)) {
+      const el = b.querySelector(key);
       if (!el) return;
       switch (true) {
+        case el.nodeName === 'A':
+          el.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await this.acrobatActionMaps(values);
+          });
+          break;
         case el.nodeName === 'DIV':
           el.addEventListener('drop', async (e) => {
             e.preventDefault();
@@ -77,6 +122,7 @@ export default class ActionBinder {
           break;
       }
     }
+    if (b == this.block) this.splashScreenEl = await this.loadSplashFragment();
   }
 
   extractFiles(e) {
@@ -113,7 +159,8 @@ export default class ActionBinder {
       headers: { 'Content-Type': fileType },
       body: blobData,
     };
-    const response = await fetch(storageUrl, uploadOptions); //Handle error
+    const response = await fetch(storageUrl, uploadOptions);
+    return response;
   }
 
   async chunkPdf(assetData, blobData, filetype) {
@@ -123,15 +170,15 @@ export default class ActionBinder {
       const start = i * assetData.blocksize;
       const end = Math.min(start + assetData.blocksize, blobData.size);
       const chunk = blobData.slice(start, end);
-
       const url = assetData.uploadUrls[i];
       return this.uploadFileToUnity(url.href, chunk, filetype);
     });
-    await Promise.all(uploadPromises);
+    this.promiseStack.push(...uploadPromises);
+    await Promise.all(this.promiseStack);
   }
 
   async continueInApp() {
-    if (this.operations.length < 1) return;
+    if (!this.operations.length) return;
     const { assetId, filename, filesize, filetype } = this.operations[this.operations.length - 1];
     const cOpts = {
       assetId,
@@ -149,62 +196,142 @@ export default class ActionBinder {
         },
       },
     };
-    const response = await this.serviceHandler.postCallToService(
-      this.acrobatApiConfig.connectorApiEndPoint,
-      { body: JSON.stringify(cOpts) },
-    );
-    if (!response) return;
-    window.location.href = response.url;
+    this.promiseStack.push(
+      this.serviceHandler.postCallToService(
+        this.acrobatApiConfig.connectorApiEndPoint,
+        { body: JSON.stringify(cOpts) },
+    ));
+    await Promise.all(this.promiseStack)
+    .then((resArr) => {
+      const response = resArr[resArr.length - 1];
+      if (!response?.url) throw new Error("Error connecting to App");
+      window.location.href = response.url;
+    })
+    .catch(() => {
+      this.showSplashScreen();
+      throw new Error("Error connecting to App");
+    });
   }
 
-  handleSplashScreen(params) {
-    if (!params.showSplashScreen) return;
-    const splashDom = this.unityEl.querySelector('.icon-splash-screen')?.closest('li')?.querySelector('.section');
-    if (!splashDom) return;
-    splashDom.classList.add('splash-loader');
-    splashDom.classList.remove('section');
-    const parSelector = (params.splashScreenConfig?.splashScreenParent) ? params.splashScreenConfig.splashScreenParent : 'main';
-    const splashParent = document.querySelector(parSelector);
-    splashParent.prepend(splashDom);
+  async cancelAcrobatOperation() {
+    await this.showSplashScreen();
+    const cancelPromise = Promise.reject(new Error('Operation termination requested.'));
+    this.promiseStack.unshift(cancelPromise);
   }
 
-  async userPdfUpload(params, files) {
+  progressBarHandler(s, delay, i, initialize = false) {
+    if (!s) return;
+    delay = Math.min(delay + 100, 2000);
+    i = Math.max(i - 5, 5);
+    const progressBar = s.querySelector('.spectrum-ProgressBar');
+    if (!initialize && progressBar?.getAttribute('value') == 100) return;
+    if (initialize) this.updateProgressBar(s, 0);
+    setTimeout(() => {
+      let v = initialize ? 0 : parseInt(progressBar.getAttribute('value'));
+      this.updateProgressBar(s, v + i);
+      this.progressBarHandler(s, delay, i);
+    }, delay);
+  }
+
+  splashVisibilityController(displayOn) {
+    if (!displayOn) return this.splashScreenEl.classList.remove('show');
+    this.progressBarHandler(this.splashScreenEl, this.LOADER_DELAY, this.LOADER_INCREMENT, true);
+    this.splashScreenEl.classList.add('show');
+  }
+
+  async loadSplashFragment() {
+    if (!this.workflowCfg.targetCfg.showSplashScreen) return;
+    this.splashFragmentLink = localizeLink(`${window.location.origin}${this.workflowCfg.targetCfg.splashScreenConfig.fragmentLink}`);
+    const resp = await fetch(`${this.splashFragmentLink}.plain.html`);
+    const html = await resp.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const sections = doc.querySelectorAll('body > div');
+    const f = createTag('div', { class: 'fragment splash-loader decorate', style: 'display: none'});
+    f.append(...sections);
+    const splashDiv = document.querySelector(this.workflowCfg.targetCfg.splashScreenConfig.splashScreenParent);
+    splashDiv.append(f);
+    const img = f.querySelector('img');
+    if (img) loadImg(img);
+    await loadArea(f);
+    return f;
+  }
+
+  async handleSplashProgressBar() {
+    const pb = this.createProgressBar();
+    this.splashScreenEl.querySelector('.icon-progress-bar').replaceWith(pb);
+    this.progressBarHandler(this.splashScreenEl, this.LOADER_DELAY, this.LOADER_INCREMENT, true);
+  }
+
+  handleOperationCancel() {
+    const actMap = {
+      'a.con-button[href*="#_cancel"]': [
+        {
+          "actionType": "interrupt"
+        }
+      ]
+    }
+    this.initActionListeners(this.splashScreenEl, actMap);
+  }
+
+  async showSplashScreen(displayOn = false) {
+    if (!this.splashScreenEl && !this.workflowCfg.targetCfg.showSplashScreen) return;
+    if (this.splashScreenEl.classList.contains('decorate')) {
+      if (this.splashScreenEl.querySelector('.icon-progress-bar')) await this.handleSplashProgressBar();
+      if (this.splashScreenEl.querySelector('a.con-button[href*="#_cancel"]')) this.handleOperationCancel();
+      this.splashScreenEl.classList.remove('decorate');
+    }
+    this.splashVisibilityController(displayOn);
+  }
+
+  verifyContent(assetData) {
+    try {
+      const finalAssetData = {
+        surfaceId: unityConfig.surfaceId, 
+        targetProduct: this.workflowCfg.productName,
+        assetId: assetData.id,
+      };
+      this.serviceHandler.postCallToService(
+        this.acrobatApiConfig.acrobatEndpoint.finalizeAsset,
+        { body: JSON.stringify(finalAssetData) },
+        false
+      );
+    } catch (e) {}
+  }
+
+  async userPdfUpload(files) {
     if (!files || files.length > this.limits.maxNumFiles) return;
     const file = files[0];
     if (!file) return;
     if (file.type != 'application/pdf') return;
     const [minsize, maxsize] = this.limits.allowedFileSize;
     if (!((file.size > minsize) && (file.size <= maxsize))) return;
-    this.handleSplashScreen(params);
-    const blobData = await this.getBlobData(file);
-    const data = {
-      surfaceId: unityConfig.surfaceId, 
-      targetProduct: this.workflowCfg.productName,
-      name: file.name,
-      size: file.size,
-      format: file.type,
-    };
-    const assetData = await this.serviceHandler.postCallToService(
-      this.acrobatApiConfig.acrobatEndpoint.createAsset,
-      { body: JSON.stringify(data) },
-    );
-    if (!assetData) return;
-    await this.chunkPdf(assetData, blobData, file.type);
-    const operationItem = {
-      assetId: assetData.id,
-      filename: file.name,
-      filesize: file.size,
-      filetype: file.type,
-    };
-    this.operations.push(operationItem);
-    const finalAssetData = {
-      surfaceId: unityConfig.surfaceId, 
-      targetProduct: this.workflowCfg.productName,
-      assetId: assetData.id,
-    };
-    const finalizeResp = await this.serviceHandler.postCallToService(
-      this.acrobatApiConfig.acrobatEndpoint.finalizeAsset,
-      { body: JSON.stringify(finalAssetData) },
-    );
+    let assetData = null;
+    try {
+      await this.showSplashScreen(true);
+      const blobData = await this.getBlobData(file);
+      const data = {
+        surfaceId: unityConfig.surfaceId, 
+        targetProduct: this.workflowCfg.productName,
+        name: file.name,
+        size: file.size,
+        format: file.type,
+      };
+      assetData = await this.serviceHandler.postCallToService(
+        this.acrobatApiConfig.acrobatEndpoint.createAsset,
+        { body: JSON.stringify(data) },
+      );
+      await this.chunkPdf(assetData, blobData, file.type);
+      const operationItem = {
+        assetId: assetData.id,
+        filename: file.name,
+        filesize: file.size,
+        filetype: file.type,
+      };
+      this.operations.push(operationItem);
+    } catch (e) {
+      console.log(e);
+      await this.showSplashScreen();
+    }
+    this.verifyContent(assetData);
   }
 }
