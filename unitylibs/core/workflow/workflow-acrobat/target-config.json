@@ -1,0 +1,52 @@
+{
+  "verb-widget.fillsign": {
+    "type": "pdf",
+    "selector": ".verb-wrapper",
+    "handler": "render",
+    "renderWidget": false,
+    "source": ".verb-wrapper .verb-container",
+    "target": ".verb-wrapper .verb-container",
+    "limits": {
+      "maxNumFiles": 1,
+      "allowedFileSize": [0, 1000000000]
+    },
+    "showSplashScreen": true,
+    "splashScreenConfig": {
+      "fragmentLink": "/drafts/mathuria/fragments/splashscreen",
+      "splashScreenParent": "body"
+    },
+    "actionMap": {
+      ".verb-wrapper": [
+        {
+          "actionType": "drop"
+        },
+        {
+          "actionType": "continueInApp"
+        }
+      ],
+      "#file-upload": [
+        {
+          "actionType": "upload"
+        },
+        {
+          "actionType": "continueInApp"
+        }
+      ]
+    }
+  },
+  "marquee": {
+    "type": "pdf",
+    "selector": ".action-area",
+    "handler": "render",
+    "renderWidget": false,
+    "source": ".action-area .con-button",
+    "target": ".action-area .con-button",
+    "actionMap": {
+      ".action-area .con-button": [
+        {
+          "actionType": "upload"
+        }
+      ]
+    }
+  }
+}

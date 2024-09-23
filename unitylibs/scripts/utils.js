@@ -29,8 +29,8 @@ export function decorateArea(area = document) {}
 
 const miloLibs = setLibs('/libs');
 
-const { createTag, getConfig, loadStyle } = await import(`${miloLibs}/utils/utils.js`);
-export { createTag, loadStyle, getConfig };
+const { createTag, getConfig, loadStyle, loadLink, localizeLink, loadArea } = await import(`${miloLibs}/utils/utils.js`);
+export { createTag, loadStyle, getConfig, loadLink, localizeLink, loadArea};
 const { decorateDefaultLinkAnalytics } = await import(`${miloLibs}/martech/attributes.js`);
 export { decorateDefaultLinkAnalytics };
 
@@ -71,6 +71,22 @@ export async function loadSvg(src) {
   }
 }
 
+export async function loadSvgs(svgs) {
+  const promiseArr = [];
+  [...svgs].forEach((svg) => {
+    promiseArr.push(
+      fetch(svg.src)
+        .then((res) => { 
+          if (res.ok) return res.text();
+          else throw new Error('Could not fetch SVG');
+        })
+        .then((txt) => { svg.parentElement.innerHTML = txt; })
+        .catch((e) => { svg.remove() }),
+    );
+  });
+  await Promise.all(promiseArr);
+}
+
 export function loadImg(img) {
   return new Promise((res) => {
     img.loading = 'eager';
@@ -102,6 +118,22 @@ export async function createActionBtn(btnCfg, btnClass, iconAsImg = false, swapO
     else actionBtn.append(btnTxt);
   }
   return actionBtn;
+}
+
+export async function priorityLoad(parr) {
+  const promiseArr = [];
+  parr.forEach((p) => {
+    if (p.endsWith('.js')) {
+      const pr = new Promise((res) => { loadLink(p, { as: 'script', rel: 'modulepreload', callback: res }); });
+      promiseArr.push(pr);
+    } else if (p.endsWith('.css')) {
+      const pr = new Promise((res) => { loadLink(p, { rel: 'stylesheet', callback: res }); });
+      promiseArr.push(pr);
+    } else {
+      promiseArr.push(fetch(p));
+    }
+  });
+  await Promise.all(promiseArr);
 }
 
 async function createErrorToast() {
@@ -179,6 +211,8 @@ export const unityConfig = (() => {
     apiKey: 'leo',
     refreshWidgetEvent: 'unity:refresh-widget',
     interactiveSwitchEvent: 'unity:interactive-switch',
+    trackAnalyticsEvent: 'unity:track-analytics',
+    surfaceId: 'unity',
   };
   const cfg = {
     prod: {
