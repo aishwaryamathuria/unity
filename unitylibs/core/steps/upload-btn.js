@@ -1,41 +1,24 @@
-import { createTag, createActionBtn, getUnityLibs } from '../../scripts/utils.js';
+import { createTag, createActionBtn } from '../../scripts/utils.js';
 
-function showErrorToast(cfg, className) {
-  const { unityEl } = cfg;
-  const msg = unityEl.querySelector(className)?.nextSibling.textContent;
-  document.querySelector('.unity-enabled .interactive-area .alert-holder .alert-toast .alert-text p').innerText = msg;
-  document.querySelector('.unity-enabled .interactive-area .alert-holder').style.display = 'flex';
-}
+const CONTAIN_OBJECT = 'contain-object';
+const MOBILE_GRAY_BG = 'mobile-gray-bg';
+const GRAY_BG = 'gray-bg';
+const FULL_HEIGHT = 'full-height';
+export const IMG_LANDSCAPE = 'img-landscape';
+export const IMG_PORTRAIT = 'img-portrait';
+export const IMG_REMOVE_BG = 'img-removebg';
 
-export async function createErrorToast(cfg) {
-  const alertImg = await fetch(`${getUnityLibs()}/img/icons/alert.svg`).then((res) => res.text());
-  const closeImg = await fetch(`${getUnityLibs()}/img/icons/close.svg`).then((res) => res.text());
-  const { unityEl, errorToastEvent } = cfg;
-  const errholder = createTag('div', { class: 'alert-holder' });
-  const errdom = createTag('div', { class: 'alert-toast' });
-  const alertContent = createTag('div', { class: 'alert-content' });
-  const alertIcon = createTag('div', { class: 'alert-icon' });
-  const alertText = createTag('div', { class: 'alert-text' });
-  const p = createTag('p', {}, 'Alert Text');
-  alertText.append(p);
-  alertIcon.innerHTML = alertImg;
-  alertIcon.append(alertText);
-  const alertClose = createTag('div', { class: 'alert-close' });
-  alertClose.innerHTML = closeImg;
-  alertContent.append(alertIcon, alertClose);
-  errdom.append(alertContent);
-  errholder.append(errdom);
-  unityEl.addEventListener(errorToastEvent, (e) => {
-    showErrorToast(cfg, e.detail.className);
-  });
-  alertClose.addEventListener('click', (e) => {
-    e.target.closest('.alert-holder').style.display = 'none';
-  });
-  return errholder;
+export function resetClasses(img, targetEl) {
+  if (img.classList.contains(CONTAIN_OBJECT)) img.classList.remove(CONTAIN_OBJECT);
+  if (img.classList.contains(IMG_LANDSCAPE)) img.classList.remove(IMG_LANDSCAPE);
+  if (img.classList.contains(IMG_PORTRAIT)) img.classList.remove(IMG_PORTRAIT);
+  if (img.classList.contains(IMG_REMOVE_BG)) img.classList.remove(IMG_REMOVE_BG);
+  if (img.classList.contains(MOBILE_GRAY_BG)) img.classList.remove(MOBILE_GRAY_BG);
+  if (targetEl.classList.contains(GRAY_BG)) targetEl.classList.remove(GRAY_BG);
 }
 
 export default async function createUpload(cfg, target, callback = null) {
-  const { unityEl, errorToastEvent, interactiveSwitchEvent, progressCircleEvent } = cfg;
+  const { refreshWidgetEvent, targetEl, unityEl } = cfg;
   const li = unityEl.querySelector('.icon-upload').parentElement;
   const a = await createActionBtn(li, 'show');
   const input = createTag('input', { class: 'file-upload', type: 'file', accept: 'image/png,image/jpg,image/jpeg', tabIndex: -1 });
@@ -44,32 +27,67 @@ export default async function createUpload(cfg, target, callback = null) {
     if (e.key === 'Enter') input.click();
   });
   a.addEventListener('change', async (e) => {
+    let flag = true;
+    const { default: showProgressCircle } = await import('../features/progress-circle/progress-circle.js');
+    const { showErrorToast } = await import('../../scripts/utils.js');
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 400000000) {
-      unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-filesize' } }));
+    if (['image/jpeg', 'image/png', 'image/jpg'].indexOf(file.type) == -1) {
+      await showErrorToast(targetEl, unityEl, '.icon-error-filetype');
+      return;
+    }
+    const MAX_FILE_SIZE = 400000000;
+    if (file.size > MAX_FILE_SIZE) {
+      await showErrorToast(targetEl, unityEl, '.icon-error-filesize');
       return;
     }
     const objUrl = URL.createObjectURL(file);
+    resetClasses(target, targetEl);
     target.src = objUrl;
     target.onload = async () => {
       cfg.uploadState.filetype = file.type;
-      if (callback) {
+      cfg.isUpload = true;
+      if (callback && flag) {
+        flag = false;
         try {
-          unityEl.dispatchEvent(new CustomEvent(progressCircleEvent));
+          const targetElWidth = targetEl.offsetWidth;
+          const targetElHeight = targetEl.offsetHeight;
+          if (!target.classList.contains(CONTAIN_OBJECT)) {
+            target.classList.add(CONTAIN_OBJECT);
+          }
+          if (!target.classList.contains(MOBILE_GRAY_BG)) {
+            target.classList.add(MOBILE_GRAY_BG);
+          }
+          if (!targetEl.classList.contains(GRAY_BG)) targetEl.classList.add(GRAY_BG);
+          if (target.naturalWidth > targetElWidth) {
+              cfg.imgDisplay = 'landscape';
+              if (!target.classList.contains(IMG_LANDSCAPE)) target.classList.add(IMG_LANDSCAPE);
+              if (target.classList.contains(FULL_HEIGHT)) target.classList.remove(FULL_HEIGHT);
+          } else {
+            cfg.imgDisplay = 'portrait';
+            if (!target.classList.contains(IMG_PORTRAIT)) target.classList.add(IMG_PORTRAIT);
+            if (!target.classList.contains(FULL_HEIGHT)) target.classList.add(FULL_HEIGHT);
+          }
+          if (target.naturalWidth == targetElWidth && target.naturalHeight == targetElHeight) {
+            cfg.imgDisplay = '';
+            resetClasses(target, targetEl);
+          }
+          showProgressCircle(targetEl);
           await callback(cfg);
-          unityEl.dispatchEvent(new CustomEvent(progressCircleEvent));
+          if (target.classList.contains(MOBILE_GRAY_BG)) target.classList.remove(MOBILE_GRAY_BG);
+          showProgressCircle(targetEl);
         } catch (err) {
-          unityEl.dispatchEvent(new CustomEvent(progressCircleEvent));
-          return;
+          showProgressCircle(targetEl);
+          await showErrorToast(targetEl, unityEl, '.icon-error-request');
         }
       }
-      if (document.querySelector('.unity-enabled .interactive-area .alert-holder').style.display !== 'flex') {
-        unityEl.dispatchEvent(new CustomEvent(interactiveSwitchEvent));
+      const alertHolder = targetEl.querySelector('.alert-holder');
+      if (alertHolder && alertHolder.style.display === 'flex') {
+        unityEl.dispatchEvent(new CustomEvent(refreshWidgetEvent));
       }
     };
-    target.onerror = () => {
-      unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-request' } }));
+    target.onerror = async () => {
+      await showErrorToast(targetEl, unityEl, '.icon-error-request');
     };
     e.target.value = '';
   });

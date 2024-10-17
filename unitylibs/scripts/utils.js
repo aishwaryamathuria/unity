@@ -29,8 +29,12 @@ export function decorateArea(area = document) {}
 
 const miloLibs = setLibs('/libs');
 
-const { createTag, getConfig, loadStyle } = await import(`${miloLibs}/utils/utils.js`);
-export { createTag, loadStyle, getConfig };
+const {
+  createTag, getConfig, loadStyle, loadLink, localizeLink, loadArea,
+} = await import(`${miloLibs}/utils/utils.js`);
+export {
+  createTag, loadStyle, getConfig, loadLink, localizeLink, loadArea,
+};
 const { decorateDefaultLinkAnalytics } = await import(`${miloLibs}/martech/attributes.js`);
 export { decorateDefaultLinkAnalytics };
 
@@ -71,6 +75,22 @@ export async function loadSvg(src) {
   }
 }
 
+export async function loadSvgs(svgs) {
+  const promiseArr = [];
+  [...svgs].forEach((svg) => {
+    promiseArr.push(
+      fetch(svg.src)
+        .then((res) => {
+          if (res.ok) return res.text();
+          else throw new Error('Could not fetch SVG');
+        })
+        .then((txt) => { svg.parentElement.innerHTML = txt; })
+        .catch((e) => { svg.remove(); }),
+    );
+  });
+  await Promise.all(promiseArr);
+}
+
 export function loadImg(img) {
   return new Promise((res) => {
     img.loading = 'eager';
@@ -104,6 +124,79 @@ export async function createActionBtn(btnCfg, btnClass, iconAsImg = false, swapO
   return actionBtn;
 }
 
+export async function priorityLoad(parr) {
+  const promiseArr = [];
+  parr.forEach((p) => {
+    if (p.endsWith('.js')) {
+      const pr = new Promise((res) => { loadLink(p, { as: 'script', rel: 'modulepreload', callback: res }); });
+      promiseArr.push(pr);
+    } else if (p.endsWith('.css')) {
+      const pr = new Promise((res) => { loadLink(p, { rel: 'stylesheet', callback: res }); });
+      promiseArr.push(pr);
+    } else {
+      promiseArr.push(fetch(p));
+    }
+  });
+  await Promise.all(promiseArr);
+}
+
+async function createErrorToast() {
+  const [alertImg, closeImg] = await Promise.all([
+    fetch(`${getUnityLibs()}/img/icons/alert.svg`).then((res) => res.text()),
+    fetch(`${getUnityLibs()}/img/icons/close.svg`).then((res) => res.text()),
+  ]);
+  const errholder = createTag('div', { class: 'alert-holder' });
+  const errdom = createTag('div', { class: 'alert-toast' });
+  const alertContent = createTag('div', { class: 'alert-content' });
+  const alertIcon = createTag('div', { class: 'alert-icon' });
+  const alertText = createTag('div', { class: 'alert-text' });
+  const p = createTag('p', {}, 'Alert Text');
+  alertText.append(p);
+  alertIcon.innerHTML = alertImg;
+  alertIcon.append(alertText);
+  const alertClose = createTag('a', { class: 'alert-close', href: '#' });
+  const alertCloseText = createTag('span', { class: 'alert-close-text' }, 'Close error toast');
+  alertClose.innerHTML = closeImg;
+  alertClose.append(alertCloseText);
+  alertContent.append(alertIcon, alertClose);
+  errdom.append(alertContent);
+  errholder.append(errdom);
+  alertClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.target.closest('.alert-holder').style.display = 'none';
+  });
+  decorateDefaultLinkAnalytics(errholder);
+  return errholder;
+}
+
+export async function showErrorToast(targetEl, unityEl, className) {
+  const alertHolder = targetEl.querySelector('.alert-holder');
+  if (!alertHolder) {
+    const errorToast = await createErrorToast();
+    targetEl.append(errorToast);
+  }
+  const msg = unityEl.querySelector(className)?.nextSibling.textContent;
+  document.querySelector('.unity-enabled .interactive-area .alert-holder .alert-toast .alert-text p').innerText = msg;
+  document.querySelector('.unity-enabled .interactive-area .alert-holder').style.display = 'flex';
+}
+
+export async function retryRequestUntilProductRedirect(cfg, requestFunction, delay = 1000) {
+  while (cfg.continueRetrying) {
+    try {
+      const scanResponse = await requestFunction();
+      if (scanResponse.status === 429 || (scanResponse.status >= 500 && scanResponse.status < 600)) {
+        await new Promise((res) => setTimeout(res, delay));
+      } else {
+        cfg.scanResponseAfterRetries = scanResponse;
+        return scanResponse;
+      }
+    } catch (e) {
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  return cfg.scanResponseAfterRetries;
+}
+
 export function createIntersectionObserver({ el, callback, cfg, options = {} }) {
   const io = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
@@ -120,10 +213,11 @@ export const unityConfig = (() => {
   const { host } = window.location;
   const commoncfg = {
     apiKey: 'leo',
-    progressCircleEvent: 'unity:progress-circle',
-    errorToastEvent: 'unity:error-toast',
     refreshWidgetEvent: 'unity:refresh-widget',
     interactiveSwitchEvent: 'unity:interactive-switch',
+    trackAnalyticsEvent: 'unity:track-analytics',
+    errorToastEvent: 'unity:show-error-toast',
+    surfaceId: 'unity',
   };
   const cfg = {
     prod: {

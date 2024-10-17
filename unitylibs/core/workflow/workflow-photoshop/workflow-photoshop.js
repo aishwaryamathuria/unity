@@ -8,18 +8,24 @@ import {
   decorateDefaultLinkAnalytics,
   createIntersectionObserver,
 } from '../../../scripts/utils.js';
-import { uploadAsset } from '../../steps/upload-step.js';
-import initAppConnector from '../../steps/app-connector.js';
-import createUpload from '../../steps/upload-btn.js';
 
 function resetSliders(unityWidget) {
   const adjustmentCircles = unityWidget.querySelectorAll('.adjustment-circle');
   adjustmentCircles.forEach((c) => { c.style = ''; });
 }
 
+function addOrUpdateOperation(array, keyToCheck, valueToCheck, keyToUpdate, newValue, newObject) {
+  const existingObject = array.find((obj) => obj[keyToCheck] === valueToCheck);
+  if (existingObject) {
+    existingObject[keyToUpdate] = newValue;
+  } else {
+    array.push(newObject);
+  }
+}
+
 function resetWorkflowState(cfg) {
   cfg.presentState = {
-    activeIdx: -1,
+    activeIdx: cfg.isUpload ? 0 : -1,
     removeBgState: {
       assetId: null,
       assetUrl: null,
@@ -67,26 +73,57 @@ async function addProductIcon(cfg) {
 }
 
 async function handleEvent(cfg, eventHandler) {
-  const { unityEl, progressCircleEvent, errorToastEvent } = cfg;
-  unityEl.dispatchEvent(new CustomEvent(progressCircleEvent));
+  const { targetEl, unityEl } = cfg;
+  const { default: showProgressCircle } = await import('../../features/progress-circle/progress-circle.js');
+  const { showErrorToast } = await import('../../../scripts/utils.js');
+  showProgressCircle(targetEl);
   try {
     await eventHandler();
   } catch (e) {
-    unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-request' } }));
+    await showErrorToast(targetEl, unityEl, '.icon-error-request');
   } finally {
-    unityEl.dispatchEvent(new CustomEvent(progressCircleEvent));
+    showProgressCircle(targetEl);
   }
+}
+
+async function updateImgClasses(cfg, img) {
+  const { imgDisplay } = cfg;
+  if (imgDisplay === 'landscape' || imgDisplay === 'portrait') {
+    const {
+      IMG_LANDSCAPE,
+      IMG_PORTRAIT,
+      IMG_REMOVE_BG,
+    } = await import('../../steps/upload-btn.js');
+    if (cfg.imgDisplay === 'landscape') {
+      if (img.classList.contains(IMG_LANDSCAPE)) img.classList.remove(IMG_LANDSCAPE);
+    } else if (cfg.imgDisplay === 'portrait') {
+      if (img.classList.contains(IMG_PORTRAIT)) img.classList.remove(IMG_PORTRAIT);
+    }
+    if (!img.classList.contains(IMG_REMOVE_BG)) img.classList.add(IMG_REMOVE_BG);
+  }
+}
+
+function checkImgModified(hostname) {
+  let isModified = false;
+  try {
+    const pageUrlObject = new URL(window.location.href);
+    isModified = hostname !== pageUrlObject.hostname;
+  } catch (e) {
+    return '';
+  }
+  return isModified;
 }
 
 async function removeBgHandler(cfg, changeDisplay = true) {
   const {
     apiEndPoint,
     apiKey,
-    errorToastEvent,
     interactiveSwitchEvent,
+    refreshWidgetEvent,
     targetEl,
     unityEl,
   } = cfg;
+  const { showErrorToast } = await import('../../../scripts/utils.js');
   const { endpoint } = cfg.wfDetail.removebg;
   const img = targetEl.querySelector('picture img');
   const hasExec = cfg.presentState.removeBgState.srcUrl;
@@ -111,13 +148,29 @@ async function removeBgHandler(cfg, changeDisplay = true) {
     }
     return false;
   }
-  const { origin, pathname } = new URL(img.src);
+  const { hostname, origin, pathname } = new URL(img.src);
   const imgUrl = srcUrl || (img.src.startsWith('blob:') ? img.src : `${origin}${pathname}`);
+  const isImgModified = checkImgModified(hostname);
   cfg.presentState.removeBgState.srcUrl = imgUrl;
+  const { uploadAsset } = await import('../../steps/upload-step.js');
   const id = await uploadAsset(cfg, imgUrl);
   if (!id) {
-    unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-request' } }));
+    await showErrorToast(targetEl, unityEl, '.icon-error-request');
     return false;
+  }
+  if (isImgModified) {
+    const { scanImgForSafety } = await import('../../steps/upload-step.js');
+    let scanResponse = await scanImgForSafety(cfg, id);
+    if (scanResponse.status === 403) {
+      unityEl.dispatchEvent(new CustomEvent(refreshWidgetEvent));
+      await showErrorToast(targetEl, unityEl, '.icon-error-acmp');
+      return false;
+    }
+    if (scanResponse.status === 429
+      || (scanResponse.status >= 500 && scanResponse.status < 600)) {
+      const { retryRequestUntilProductRedirect } = await import('../../../scripts/utils.js');
+      scanResponse = await retryRequestUntilProductRedirect(cfg, () => scanImgForSafety(cfg, id));
+    }
   }
   cfg.preludeState.assetId = id;
   const removeBgOptions = {
@@ -127,15 +180,17 @@ async function removeBgHandler(cfg, changeDisplay = true) {
   };
   const response = await fetch(`${apiEndPoint}/${endpoint}`, removeBgOptions);
   if (response.status !== 200) {
-    unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-request' } }));
+    await showErrorToast(targetEl, unityEl, '.icon-error-request');
     return false;
   }
   const { outputUrl } = await response.json();
   const opId = new URL(outputUrl).pathname.split('/').pop();
+  cfg.preludeState.finalAssetId = opId;
   cfg.presentState.removeBgState.assetId = opId;
   cfg.presentState.removeBgState.assetUrl = outputUrl;
   cfg.preludeState.operations.push({ name: 'removeBackground' });
   if (!changeDisplay) return true;
+  await updateImgClasses(cfg, img);
   img.src = outputUrl;
   await loadImg(img);
   unityEl.dispatchEvent(new CustomEvent(interactiveSwitchEvent));
@@ -163,8 +218,8 @@ async function changeBgHandler(cfg, selectedUrl = null, refreshState = true) {
     unityWidget,
     unityEl,
     interactiveSwitchEvent,
-    errorToastEvent,
   } = cfg;
+  const { showErrorToast } = await import('../../../scripts/utils.js');
   const { endpoint } = cfg.wfDetail.changebg;
   const unityRetriggered = await removeBgHandler(cfg, false);
   const img = targetEl.querySelector('picture img');
@@ -172,11 +227,12 @@ async function changeBgHandler(cfg, selectedUrl = null, refreshState = true) {
   const bgImg = selectedUrl || unityWidget.querySelector('.unity-option-area .changebg-options-tray img').dataset.backgroundImg;
   const { origin, pathname } = new URL(bgImg);
   const bgImgUrl = `${origin}${pathname}`;
+  const { uploadAsset } = await import('../../steps/upload-step.js');
   const bgId = await uploadAsset(cfg, bgImgUrl);
   if (!unityRetriggered && cfg.presentState.changeBgState[bgImgUrl]?.assetId) {
     img.src = cfg.presentState.changeBgState[bgImgUrl].assetUrl;
     await loadImg(img);
-    cfg.preludeState.operations.push({ name: 'changeBackground', assetIds: [bgId] });
+    addOrUpdateOperation(cfg.preludeState.operations, 'name', 'changeBackground', 'assetIds', [bgId], { name: 'changeBackground', assetIds: [bgId] });
     unityEl.dispatchEvent(new CustomEvent(interactiveSwitchEvent));
     return;
   }
@@ -193,7 +249,7 @@ async function changeBgHandler(cfg, selectedUrl = null, refreshState = true) {
   };
   const response = await fetch(`${apiEndPoint}/${endpoint}`, changeBgOptions);
   if (response.status !== 200) {
-    unityEl.dispatchEvent(new CustomEvent(errorToastEvent, { detail: { className: '.icon-error-request' } }));
+    await showErrorToast(targetEl, unityEl, '.icon-error-request');
     return;
   }
   const { outputUrl } = await response.json();
@@ -201,9 +257,11 @@ async function changeBgHandler(cfg, selectedUrl = null, refreshState = true) {
   cfg.presentState.changeBgState[bgImgUrl] = {};
   cfg.presentState.changeBgState[bgImgUrl].assetId = changeBgId;
   cfg.presentState.changeBgState[bgImgUrl].assetUrl = outputUrl;
-  cfg.preludeState.operations.push({ name: 'changeBackground', assetIds: [bgId] });
+  cfg.preludeState.finalAssetId = changeBgId;
+  addOrUpdateOperation(cfg.preludeState.operations, 'name', 'changeBackground', 'assetIds', [bgId], { name: 'changeBackground', assetIds: [bgId] });
   img.src = outputUrl;
   await loadImg(img);
+  if (!img.classList.contains('mobile-gray-bg')) img.classList.add('mobile-gray-bg');
   unityEl.dispatchEvent(new CustomEvent(interactiveSwitchEvent));
 }
 
@@ -384,6 +442,8 @@ async function resetWidgetState(cfg) {
   const { unityWidget, unityEl, targetEl } = cfg;
   cfg.presentState.activeIdx = -1;
   cfg.preludeState.operations = [];
+  cfg.isUpload = false;
+  cfg.imgDisplay = '';
   const initImg = unityEl.querySelector(':scope picture img');
   const img = targetEl.querySelector(':scope > picture img');
   img.src = initImg.src;
@@ -392,6 +452,8 @@ async function resetWidgetState(cfg) {
   unityWidget.querySelector('.widget-product-icon')?.classList.add('show');
   unityWidget.querySelector('.widget-refresh-button').classList.remove('show');
   targetEl.querySelector(':scope > .widget-refresh-button').classList.remove('show');
+  const { resetClasses } = await import('../../steps/upload-btn.js');
+  resetClasses(img, targetEl);
   resetSliders(unityWidget);
   await loadImg(img);
 }
@@ -414,6 +476,7 @@ async function uploadCallback(cfg) {
   resetWorkflowState(cfg);
   if (enabledFeatures.length === 1) return;
   await removeBgHandler(cfg);
+  cfg.isUpload = false;
 }
 
 export default async function init(cfg) {
@@ -422,8 +485,10 @@ export default async function init(cfg) {
   await addProductIcon(cfg);
   await changeVisibleFeature(cfg);
   const img = cfg.targetEl.querySelector('picture img');
+  const { default: createUpload } = await import('../../steps/upload-btn.js');
   const uploadBtn = await createUpload(cfg, img, uploadCallback);
   unityWidget.querySelector('.unity-action-area').append(uploadBtn);
+  const { default: initAppConnector } = await import('../../steps/app-connector.js');
   await initAppConnector(cfg, 'photoshop');
   await decorateDefaultLinkAnalytics(unityWidget);
   unityEl.addEventListener(interactiveSwitchEvent, async () => {

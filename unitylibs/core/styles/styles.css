@@ -8,9 +8,18 @@
   --animation-blue: #1273E6;
 }
 
-.unity,
+.unity {
+  display: none !important;
+}
+
 .unity-enabled .interactive-area .unity-widget.decorating {
   display: none;
+}
+
+.unity-enabled.supplemental-text-legal .supplemental-text {
+  font-size: var(--type-body-xxs-size);
+  line-height: var(--type-heading-xxs-lh);
+  font-style: italic;
 }
 
 .unity-enabled .interactive-area {
@@ -134,12 +143,12 @@
 }
 
 .unity-enabled .interactive-area .widget-refresh-button svg path,
-.unity-enabled .interactive-area .unity-action-btn .btn-icon svg path {
+.unity-enabled .interactive-area .unity-action-btn:not(.continue-in-app-button) .btn-icon svg path {
   fill: var(--color-white);
 }
 
 .unity-enabled .interactive-area.light .widget-refresh-button svg path,
-.unity-enabled .interactive-area.light .unity-action-btn .btn-icon svg path {
+.unity-enabled .interactive-area.light .unity-action-btn:not(.continue-in-app-button) .btn-icon svg path {
   fill: var(--color-black);
 }
 
@@ -164,9 +173,8 @@
   background: var(--alert-red);
   border-radius: 10px;
   width: 339px;
-  height: 56px;
+  min-height: 56px;
   position: absolute;
-  bottom: 312px;
   margin-left: auto;
   margin-right: auto;
   left: 0;
@@ -199,22 +207,20 @@
 }
 
 .unity-enabled .interactive-area .alert-holder .alert-toast .alert-content .alert-text {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   width: 239px;
-  height: 18px;
-  padding: 18px 16px 20px 8px;
+  min-height: 18px;
+  padding-left: 12px;
+  padding-right: 16px;
   gap: 10px;
   align-self: stretch;
 }
 
 .unity-enabled .interactive-area .alert-holder .alert-toast .alert-content .alert-text p {
-  display: flex;
   color: var(--color-white);
   font-weight: 400;
   font-size: var(--type-body-m-size);
   line-height: var(--type-body-m-lh);
+  margin: 12px 0;
 }
 
 .unity-enabled .interactive-area .alert-holder .alert-toast .alert-content .alert-close {
@@ -238,6 +244,37 @@
   max-width: auto;
 }
 
+.unity-enabled .interactive-area .alert-holder .alert-toast .alert-content .alert-close .alert-close-text {
+  display: none;
+}
+
+.marquee.split.unity-enabled .asset.bleed .interactive-area > picture .contain-object {
+  object-fit: contain;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff;
+  background-image: linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(135deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(135deg, transparent 75%, #ccc 75%);
+  background-size: 25px 25px;
+  background-position: 0 0, 12.5px 0, 12.5px -12.5px, 0px 12.5px;
+}
+
+.marquee.split.unity-enabled .asset.bleed .interactive-area > picture .img-landscape {
+  height: 100%;
+  background-color: unset;
+  background-image: unset;
+  background-size: unset;
+  background-position: unset;
+}
+
+.marquee.split.unity-enabled .asset.bleed .interactive-area > picture .img-portrait {
+  width: auto;
+}
+
 .aside.split.unity-enabled.large {
   flex-direction: column;
 }
@@ -253,6 +290,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .unity-enabled .gray-bg {
+    background-color: #444;
+    background-image: unset;
+    background-size: unset;
+    background-position: unset;
   }
 
   .unity-enabled .interactive-area > picture {
@@ -356,6 +400,33 @@
     text-decoration: none;
   }
 
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .contain-object {
+    position: relative;
+    top: unset;
+    left: unset;
+    transform: unset;
+  }
+  
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .img-portrait {
+    object-fit: contain;
+    width: 100%;
+    height: auto;
+    background-color: #fff;
+    background-image: linear-gradient(45deg, #ccc 25%, transparent 25%),
+      linear-gradient(135deg, #ccc 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ccc 75%),
+      linear-gradient(135deg, transparent 75%, #ccc 75%);
+    background-size: 25px 25px;
+    background-position: 0 0, 12.5px 0, 12.5px -12.5px, 0px 12.5px;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .mobile-gray-bg {
+    background-color: unset;
+    background-image: unset;
+    background-size: unset;
+    background-position: unset;
+  }
+
   .aside.split.unity-enabled .foreground.container {
     order: 2;
   }
@@ -374,12 +445,6 @@
   .marquee.split.unity-enabled .asset.bleed .interactive-area {
     width: 100%;
     height: 560px;
-  }
-
-  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
   }
 
   .marquee.split.unity-enabled .foreground.container .text {
@@ -426,6 +491,37 @@
 }
 
 @media screen and (min-width: 600px) {
+  .unity-enabled .gray-bg {
+    background-color: #444;
+    background-image: unset;
+    background-size: unset;
+    background-position: unset;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .contain {
+    background-color: unset;
+    background-image: unset;
+    background-size: unset;
+    background-position: unset;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .img-removebg {
+    height: auto;
+    width: auto;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture .full-height {
+    height: 100%;
+  }
+  
   .unity-enabled .interactive-area .unity-widget {
     max-width: 90%;
   }
@@ -609,6 +705,10 @@
     position: absolute;
     object-fit: cover;
     object-position: center;
+  }
+
+  .marquee.split.unity-enabled .asset.bleed .interactive-area > picture img {
+    min-height: unset;
   }
 
   .unity-enabled .interactive-area .unity-widget {
