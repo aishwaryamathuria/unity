@@ -129,6 +129,7 @@ class WfInitiator {
       priorityList.push(
         `${getUnityLibs()}/core/workflow/${workflowName}/widget.css`,
         `${getUnityLibs()}/core/workflow/${workflowName}/widget.js`,
+        `${getUnityLibs()}/core/features/progress-circle/progress-circle.css`,
       );
     }
     await priorityLoad(priorityList);
@@ -250,6 +251,10 @@ class WfInitiator {
       'workflow-acrobat': {
         productName: 'acrobat',
         sfList: new Set(['fillsign']),
+      },
+      'workflow-dilbert': {
+        productName: 'dilbert',
+        sfList: new Set(['removebg', 'changebg', 'slider', 'fillsign', 'colorize', 'resize', 'converttojpg' ]),
       }
     };
     [...this.el.classList].forEach((cn) => { if (cn.match('workflow-')) wfName = cn; });
@@ -266,18 +271,8 @@ class WfInitiator {
 
   getEnabledFeatures() {
     const { supportedFeatures } = this.workflowCfg;
-    const configuredFeatures = this.el.querySelectorAll(':scope > div > div > ul > li > span.icon');
-    configuredFeatures.forEach((cf) => {
-      const cfName = [...cf.classList].find((cn) => cn.match('icon-'));
-      if (!cfName) return;
-      const fn = cfName.split('-')[1];
-      if (supportedFeatures.has(fn)) {
-        this.workflowCfg.enabledFeatures.push(fn);
-        this.workflowCfg.featureCfg.push(cf.closest('li'));
-      } else if (fn.includes('error')) {
-        this.workflowCfg.errors[fn] = cf.closest('li').innerText;
-      }
-    });
+    supportedFeatures.forEach((f) => this.workflowCfg.enabledFeatures.push(f));
+    return;
   }
 }
 
